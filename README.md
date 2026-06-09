@@ -20,6 +20,7 @@ added to measure average phase/sign degradation.
 - `DQMC/SmoqyDQMC/` — SmoQyDQMC driver and noninteracting/topology checks.
 - `docs/model_conventions.md` — Hamiltonian, topology, interaction and sign conventions.
 - `docs/ed_2x2_beta7_benchmark.md` — 2×2 ED `n(mu)` benchmark for all tiers and PBC/cylinder BCs.
+- `docs/dqmc_2x2_beta7_n_vs_mu_points.md` — 2×2 DQMC points overlaid on the ED curves.
 - `scripts/health_check.sh` — bounded local ED/topology/DQMC smoke checks.
 - `vendor/SmoQyDQMC.jl/` — vendored SmoQyDQMC with the Kanamori HST extensions.
 
