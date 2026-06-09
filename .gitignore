@@ -1,0 +1,11 @@
+.DS_Store
+*.log
+*.aux
+*.synctex.gz
+.julia_depot/
+ED/results/
+DQMC/SmoqyDQMC/results/
+results/
+*.jld2
+*.checkpoint
+*.ser
