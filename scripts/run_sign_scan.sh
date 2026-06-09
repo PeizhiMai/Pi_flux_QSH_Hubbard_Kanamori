@@ -22,7 +22,7 @@ run_one() {
   esac
   "$JULIA_BIN" --project="$JULIA_PROJECT" DQMC/SmoqyDQMC/scripts/run_piflux_qsh_smoqy.jl \
     --Nx=2 --Ly=2 --t=1.0 --lambda=0.2 --U=1.0 --JH="$jh" --beta="$beta" --dtau=0.1 \
-    --Ntherm="${NTHERM:-20}" --Nmeas="${NMEAS:-40}" --Nupdates=1 --n_stab=2 --outdir="$OUTDIR/raw" --sID="$sid" "${flags[@]}"
+    --Ntherm="${NTHERM:-50}" --Nmeas="${NMEAS:-100}" --Nupdates=1 --n_stab=2 --outdir="$OUTDIR/raw" --sID="$sid" "${flags[@]}"
   local summary
   summary="$(find "$OUTDIR/raw" -name summary.txt | sort | tail -1)"
   python3 - <<PY >> "$TSV"
@@ -34,7 +34,7 @@ print('\t'.join(['$tier','$beta','$jh', ph.group(1), ph.group(2), dn.group(1), '
 PY
 }
 sid=1
-for beta in ${BETAS:-0.5 1.0}; do
+for beta in ${BETAS:-10.0}; do
   for jh in ${JHS:-0.0 0.1 0.25}; do
     for tier in hubbard density spinflip full; do
       run_one "$tier" "$beta" "$jh" "$sid"
