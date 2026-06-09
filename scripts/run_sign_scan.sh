@@ -10,7 +10,7 @@ cd "$ROOT"
 OUTDIR="${OUTDIR:-$ROOT/results/sign_scan}"
 mkdir -p "$OUTDIR"
 TSV="$OUTDIR/sign_scan_summary.tsv"
-echo -e "tier\tbeta\tJH\taverage_phase_re\taverage_phase_im\tdensity_per_cell\tsummary" > "$TSV"
+echo -e "tier\tLx\tLy\tbeta\tJH\taverage_phase_re\taverage_phase_im\tdensity_per_cell\tsummary" > "$TSV"
 run_one() {
   local tier="$1" beta="$2" jh="$3" sid="$4"
   local flags=(--density_kanamori=false)
@@ -21,7 +21,7 @@ run_one() {
     full) flags=(--density_kanamori=true --spin_flip_hund=true --pair_hopping=true) ;;
   esac
   "$JULIA_BIN" --project="$JULIA_PROJECT" DQMC/SmoqyDQMC/scripts/run_piflux_qsh_smoqy.jl \
-    --Nx=2 --Ly=2 --t=1.0 --lambda=0.2 --U=1.0 --JH="$jh" --beta="$beta" --dtau=0.1 \
+    --Lx="${Lx:-4}" --Ly="${Ly:-4}" --t=1.0 --lambda=0.2 --U=1.0 --JH="$jh" --beta="$beta" --dtau=0.1 \
     --Ntherm="${NTHERM:-50}" --Nmeas="${NMEAS:-100}" --Nupdates=1 --n_stab=2 --outdir="$OUTDIR/raw" --sID="$sid" "${flags[@]}"
   local summary
   summary="$(find "$OUTDIR/raw" -name summary.txt | sort | tail -1)"
@@ -30,7 +30,7 @@ import pathlib, re
 text=pathlib.Path('$summary').read_text()
 ph=re.search(r'average_phase =\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*([+-](?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)i', text)
 dn=re.search(r'density_per_cell_reweighted = ([^\n]+)', text)
-print('\t'.join(['$tier','$beta','$jh', ph.group(1), ph.group(2), dn.group(1), '$summary']))
+print('\t'.join(['$tier','${Lx:-4}','${Ly:-4}','$beta','$jh', ph.group(1), ph.group(2), dn.group(1), '$summary']))
 PY
 }
 sid=1

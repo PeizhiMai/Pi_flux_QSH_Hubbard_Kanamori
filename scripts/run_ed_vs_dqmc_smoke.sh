@@ -20,9 +20,9 @@ run_level() {
     spinflip) flags=(--density_kanamori=true --spin_flip_hund=true) ;;
     full) flags=(--density_kanamori=true --spin_flip_hund=true --pair_hopping=true) ;;
   esac
-  "$JULIA_BIN" --project=ED ED/scripts/run_piflux_qsh_ed.jl --Nx=1 --Ly=2 --t=0.2 --lambda=0.05 --U=1.0 --JH=0.25 --beta=0.3 --mu=0.0 --interaction_level="$level" --outdir="$OUTDIR/ed_$level" >/dev/null
+  "$JULIA_BIN" --project=ED ED/scripts/run_piflux_qsh_ed.jl --Lx=1 --Ly=2 --t=0.2 --lambda=0.05 --U=1.0 --JH=0.25 --beta=0.3 --mu=0.0 --interaction_level="$level" --outdir="$OUTDIR/ed_$level" >/dev/null
   "$JULIA_BIN" --project="$JULIA_PROJECT" DQMC/SmoqyDQMC/scripts/run_piflux_qsh_smoqy.jl \
-    --Nx=1 --Ly=2 --t=0.2 --lambda=0.05 --U=1.0 --JH=0.25 --beta=0.3 --dtau=0.1 \
+    --Lx=1 --Ly=2 --t=0.2 --lambda=0.05 --U=1.0 --JH=0.25 --beta=0.3 --dtau=0.1 \
     --Ntherm=2 --Nmeas=4 --Nupdates=1 --n_stab=1 --outdir="$OUTDIR/dqmc" --sID="$sid" "${flags[@]}" >/dev/null
   local summary; summary="$(find "$OUTDIR/dqmc" -name summary.txt | sort | tail -1)"
   python3 - <<PY >> "$TSV"

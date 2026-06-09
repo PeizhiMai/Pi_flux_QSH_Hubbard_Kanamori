@@ -10,7 +10,7 @@ export EDParams, EDResult, SectorInfo, build_piflux_qsh_onebody,
        parse_cli_args, main
 
 Base.@kwdef struct EDParams
-    Nx::Int = 2
+    Lx::Int = 2
     Ly::Int = 2
     t::Float64 = 1.0
     lambda::Float64 = 0.2
@@ -38,7 +38,7 @@ struct EDResult
     Nup::Float64
     Ndn::Float64
     density_per_cell::Float64
-    profile::Matrix{Float64} # Nx × 4: A_up, A_dn, B_up, B_dn averaged over y
+    profile::Matrix{Float64} # Lx × 4: A_up, A_dn, B_up, B_dn averaged over y
     sectors::Vector{SectorInfo}
     qmin::Float64
 end
@@ -50,14 +50,14 @@ end
 
 const _VALID_LEVELS = (:hubbard, :density, :spinflip, :full)
 
-@inline nsites(p::EDParams) = 2 * p.Nx * p.Ly
+@inline nsites(p::EDParams) = 2 * p.Lx * p.Ly
 @inline nflavors(p::EDParams) = 2 * nsites(p)
 @inline up_flavor(site::Int, Ns::Int) = site
 @inline dn_flavor(site::Int, Ns::Int) = Ns + site
 @inline spin_sign(spin::Symbol) = spin === :up ? 1.0 : -1.0
 
 function validate_params(p::EDParams)
-    p.Nx > 0 || error("Nx must be positive")
+    p.Lx > 0 || error("Lx must be positive")
     p.Ly > 0 || error("Ly must be positive")
     p.beta > 0 || error("beta must be positive")
     p.U >= 0 || error("U must be non-negative")
@@ -84,10 +84,10 @@ function add_hop!(K::AbstractMatrix{ComplexF64}, p::EDParams, x0::Int, y0::Int,
                   orb1::Int, orb2::Int, dx::Int, dy::Int, h::ComplexF64)
     x1 = x0 + dx
     y1 = y0 + dy
-    if p.open_x && (x1 < 0 || x1 >= p.Nx)
+    if p.open_x && (x1 < 0 || x1 >= p.Lx)
         return nothing
     end
-    x1 = mod(x1, p.Nx)
+    x1 = mod(x1, p.Lx)
     y1 = mod(y1, p.Ly)
     i = site_index(x0, y0, orb1, p)
     j = site_index(x1, y1, orb2, p)
@@ -118,7 +118,7 @@ function build_piflux_qsh_onebody(p::EDParams, spin::Symbol)
     Ns = nsites(p)
     K = zeros(ComplexF64, Ns, Ns)
     for (orb1, orb2, dx, dy, h) in piflux_qsh_bond_defs(p.t, p.lambda, spin)
-        for y0 in 0:p.Ly-1, x0 in 0:p.Nx-1
+        for y0 in 0:p.Ly-1, x0 in 0:p.Lx-1
             add_hop!(K, p, x0, y0, orb1, orb2, dx, dy, h)
         end
     end
@@ -192,7 +192,7 @@ function collect_transverse_terms(p::EDParams)
     Ns = nsites(p)
     terms = FermionTerm[]
     p.interaction_level in (:hubbard, :density) && return terms
-    for x0 in 0:p.Nx-1, y0 in 0:p.Ly-1
+    for x0 in 0:p.Lx-1, y0 in 0:p.Ly-1
         a = site_index(x0, y0, 1, p)
         b = site_index(x0, y0, 2, p)
         au = up_flavor(a, Ns); bu = up_flavor(b, Ns)
@@ -212,7 +212,7 @@ end
 function diagonal_interaction_energy(state::UInt64, p::EDParams)
     Ns = nsites(p)
     e = 0.0
-    for x0 in 0:p.Nx-1, y0 in 0:p.Ly-1
+    for x0 in 0:p.Lx-1, y0 in 0:p.Ly-1
         a = site_index(x0, y0, 1, p)
         b = site_index(x0, y0, 2, p)
         nau = occ(state, up_flavor(a,Ns)) ? 1.0 : 0.0
@@ -260,7 +260,7 @@ end
 
 function state_profile(state::UInt64, p::EDParams)
     Ns = nsites(p)
-    prof = zeros(Float64, p.Nx, 4)
+    prof = zeros(Float64, p.Lx, 4)
     for site in 1:Ns
         x0, _, orb = site_coordinates(site, p)
         col_up = (orb - 1) * 2 + 1
@@ -278,7 +278,7 @@ function free_fermion_grand_canonical(p::EDParams)
     Kdn = build_piflux_qsh_onebody(p, :dn)
     blocks = ((Kup, :up), (Kdn, :dn))
     logZ = 0.0; energy = 0.0; Ntot = 0.0; Nup = 0.0; Ndn = 0.0
-    prof = zeros(Float64, p.Nx, 4)
+    prof = zeros(Float64, p.Lx, 4)
     for (K, spin) in blocks
         evals, evecs = eigen(Hermitian(K))
         for n in eachindex(evals)
@@ -295,7 +295,7 @@ function free_fermion_grand_canonical(p::EDParams)
             end
         end
     end
-    return EDResult(p, logZ, energy, Ntot, Nup, Ndn, Ntot/(p.Nx*p.Ly), prof, SectorInfo[], 0.0)
+    return EDResult(p, logZ, energy, Ntot, Nup, Ndn, Ntot/(p.Lx*p.Ly), prof, SectorInfo[], 0.0)
 end
 
 function grand_canonical_ed(p::EDParams; write_spectrum::Bool=false)
@@ -316,7 +316,7 @@ function grand_canonical_ed(p::EDParams; write_spectrum::Bool=false)
             E = evals[a]
             q = E - p.mu * (Nup + Ndn)
             qmin = min(qmin, q)
-            prof = zeros(Float64, p.Nx, 4)
+            prof = zeros(Float64, p.Lx, 4)
             vec = F.vectors[:,a]
             for (idx, st) in pairs(states)
                 w = abs2(vec[idx])
@@ -330,7 +330,7 @@ function grand_canonical_ed(p::EDParams; write_spectrum::Bool=false)
     Zs = sum(weights)
     logZ = log(Zs) - p.beta * qmin
     energy = 0.0; Nup_avg = 0.0; Ndn_avg = 0.0
-    prof_avg = zeros(Float64, p.Nx, 4)
+    prof_avg = zeros(Float64, p.Lx, 4)
     for (w, (_, E, Nu, Nd, prof)) in zip(weights, entries)
         ww = w / Zs
         energy += ww * E
@@ -339,7 +339,7 @@ function grand_canonical_ed(p::EDParams; write_spectrum::Bool=false)
         prof_avg .+= ww .* prof
     end
     Ntot = Nup_avg + Ndn_avg
-    return EDResult(p, logZ, energy, Ntot, Nup_avg, Ndn_avg, Ntot/(p.Nx*p.Ly), prof_avg, sectors, qmin)
+    return EDResult(p, logZ, energy, Ntot, Nup_avg, Ndn_avg, Ntot/(p.Lx*p.Ly), prof_avg, sectors, qmin)
 end
 
 function write_outputs(result::EDResult, outdir::AbstractString)
@@ -361,7 +361,7 @@ function write_outputs(result::EDResult, outdir::AbstractString)
     end
     open(joinpath(outdir, "ed_density_profile.tsv"), "w") do io
         println(io, "x\tA_up\tA_dn\tB_up\tB_dn")
-        for x in 1:p.Nx
+        for x in 1:p.Lx
             @printf(io, "%d\t%.12g\t%.12g\t%.12g\t%.12g\n", x-1, result.profile[x,1], result.profile[x,2], result.profile[x,3], result.profile[x,4])
         end
     end
@@ -383,7 +383,7 @@ end
 
 function parse_cli_args(args=ARGS)
     defaults = Dict{String,Any}(
-        "Nx"=>2, "Ly"=>2, "t"=>1.0, "lambda"=>0.2, "U"=>1.0, "JH"=>0.25,
+        "Lx"=>2, "Ly"=>2, "t"=>1.0, "lambda"=>0.2, "U"=>1.0, "JH"=>0.25,
         "beta"=>2.0, "mu"=>0.0, "open_x"=>false, "interaction_level"=>"full",
         "outdir"=>joinpath(@__DIR__, "..", "results", "piflux_qsh_ed"),
     )
@@ -403,7 +403,7 @@ function parse_cli_args(args=ARGS)
         p[key] = d isa Bool ? parse_bool(val) : d isa Int ? parse(Int,val) : d isa Float64 ? parse(Float64,val) : val
         i += 1
     end
-    ep = EDParams(Nx=p["Nx"], Ly=p["Ly"], t=p["t"], lambda=p["lambda"], U=p["U"], JH=p["JH"],
+    ep = EDParams(Lx=p["Lx"], Ly=p["Ly"], t=p["t"], lambda=p["lambda"], U=p["U"], JH=p["JH"],
                   beta=p["beta"], mu=p["mu"], open_x=p["open_x"], interaction_level=Symbol(p["interaction_level"]))
     return ep, p["outdir"]
 end
@@ -412,7 +412,7 @@ function main(args=ARGS)
     p, outdir = parse_cli_args(args)
     res = grand_canonical_ed(p)
     write_outputs(res, outdir)
-    @printf("ED complete: level=%s Nx=%d Ly=%d beta=%.6g mu=%.6g\n", p.interaction_level, p.Nx, p.Ly, p.beta, p.mu)
+    @printf("ED complete: level=%s Lx=%d Ly=%d beta=%.6g mu=%.6g\n", p.interaction_level, p.Lx, p.Ly, p.beta, p.mu)
     @printf("  logZ = %.12g\n  energy = %.12g\n  N = %.12g\n  density_per_cell = %.12g\n", res.logZ, res.energy, res.N, res.density_per_cell)
     return res
 end

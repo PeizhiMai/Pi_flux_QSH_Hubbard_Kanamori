@@ -6,7 +6,7 @@ using .PiFluxQSHKanamoriED
 
 @testset "Pi-flux QSH Kanamori ED" begin
     @testset "one-body Hermiticity and TR partner" begin
-        p = EDParams(Nx=3, Ly=4, t=1.0, lambda=0.2, U=0.0, JH=0.0, beta=1.0, mu=0.0)
+        p = EDParams(Lx=3, Ly=4, t=1.0, lambda=0.2, U=0.0, JH=0.0, beta=1.0, mu=0.0)
         Kup = build_piflux_qsh_onebody(p, :up)
         Kdn = build_piflux_qsh_onebody(p, :dn)
         @test Kup ≈ Kup'
@@ -15,7 +15,7 @@ using .PiFluxQSHKanamoriED
     end
 
     @testset "noninteracting grand canonical regression" begin
-        p = EDParams(Nx=2, Ly=2, t=1.0, lambda=0.15, U=0.0, JH=0.0,
+        p = EDParams(Lx=2, Ly=2, t=1.0, lambda=0.15, U=0.0, JH=0.0,
                      beta=0.8, mu=0.1, interaction_level=:full)
         ed = grand_canonical_ed(p)
         free = free_fermion_grand_canonical(p)
@@ -26,7 +26,7 @@ using .PiFluxQSHKanamoriED
 
     @testset "particle-hole half filling" begin
         for lvl in (:hubbard, :density, :spinflip, :full)
-            p = EDParams(Nx=1, Ly=1, t=0.0, lambda=0.0, U=2.0, JH=0.3,
+            p = EDParams(Lx=1, Ly=1, t=0.0, lambda=0.0, U=2.0, JH=0.3,
                          beta=1.2, mu=0.0, interaction_level=lvl)
             r = grand_canonical_ed(p)
             @test r.N ≈ 2.0 atol=1e-11
@@ -36,9 +36,9 @@ using .PiFluxQSHKanamoriED
     end
 
     @testset "atomic factorization" begin
-        one = EDParams(Nx=1, Ly=1, t=0.0, lambda=0.0, U=1.7, JH=0.25,
+        one = EDParams(Lx=1, Ly=1, t=0.0, lambda=0.0, U=1.7, JH=0.25,
                        beta=1.1, mu=0.2, interaction_level=:full)
-        two = EDParams(Nx=2, Ly=1, t=0.0, lambda=0.0, U=1.7, JH=0.25,
+        two = EDParams(Lx=2, Ly=1, t=0.0, lambda=0.0, U=1.7, JH=0.25,
                        beta=1.1, mu=0.2, interaction_level=:full)
         r1 = grand_canonical_ed(one)
         r2 = grand_canonical_ed(two)
@@ -48,7 +48,7 @@ using .PiFluxQSHKanamoriED
     end
 
     @testset "interaction hierarchy at nonzero JH" begin
-        base = (; Nx=1, Ly=1, t=0.0, lambda=0.0, U=2.0, JH=0.3, beta=1.0, mu=0.1)
+        base = (; Lx=1, Ly=1, t=0.0, lambda=0.0, U=2.0, JH=0.3, beta=1.0, mu=0.1)
         rh = grand_canonical_ed(EDParams(; base..., interaction_level=:hubbard))
         rd = grand_canonical_ed(EDParams(; base..., interaction_level=:density))
         rs = grand_canonical_ed(EDParams(; base..., interaction_level=:spinflip))
@@ -59,7 +59,7 @@ using .PiFluxQSHKanamoriED
     end
 
     @testset "JH zero transverse regression" begin
-        base = (; Nx=1, Ly=1, t=0.2, lambda=0.05, U=1.2, JH=0.0, beta=0.9, mu=0.0)
+        base = (; Lx=1, Ly=1, t=0.2, lambda=0.05, U=1.2, JH=0.0, beta=0.9, mu=0.0)
         rd = grand_canonical_ed(EDParams(; base..., interaction_level=:density))
         rs = grand_canonical_ed(EDParams(; base..., interaction_level=:spinflip))
         rf = grand_canonical_ed(EDParams(; base..., interaction_level=:full))

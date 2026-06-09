@@ -20,7 +20,7 @@ echo "[health] ED tests"
 "$JULIA_BIN" --project=ED ED/test/run_ed_tests.jl
 
 echo "[health] H0 topology/sign checks"
-"$JULIA_BIN" DQMC/SmoqyDQMC/scripts/check_piflux_qsh_h0.jl --Nx=4 --Ly=4 --lambda=0.2 --grid=31
+"$JULIA_BIN" DQMC/SmoqyDQMC/scripts/check_piflux_qsh_h0.jl --Lx=4 --Ly=4 --lambda=0.2 --grid=31
 
 if [[ "$ED_ONLY" == true ]]; then
   echo "[health] --ed-only requested; skipping DQMC smokes"
@@ -30,7 +30,7 @@ fi
 SMOKE_OUTDIR="${SMOKE_OUTDIR:-/private/tmp/piflux_qsh_hubbard_kanamori_smoke}"
 rm -rf "$SMOKE_OUTDIR"
 mkdir -p "$SMOKE_OUTDIR"
-common=(--Nx=2 --Ly=2 --t=1.0 --lambda=0.2 --U=1.0 --JH=0.25 --beta=0.2 --dtau=0.1 --Ntherm=1 --Nmeas=2 --Nupdates=1 --n_stab=1 --outdir="$SMOKE_OUTDIR")
+common=(--Lx=2 --Ly=2 --t=1.0 --lambda=0.2 --U=1.0 --JH=0.25 --beta=0.2 --dtau=0.1 --Ntherm=1 --Nmeas=2 --Nupdates=1 --n_stab=1 --outdir="$SMOKE_OUTDIR")
 
 echo "[health] DQMC Hubbard-only sign-free smoke"
 "$JULIA_BIN" --project="$JULIA_PROJECT" DQMC/SmoqyDQMC/scripts/run_piflux_qsh_smoqy.jl "${common[@]}" --density_kanamori=false --sID=1

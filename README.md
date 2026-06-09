@@ -36,5 +36,4 @@ script now uses `beta=10.0`:
 OUTDIR=/private/tmp/piflux_beta10_sign_scan JHS="0.25" ./scripts/run_sign_scan.sh
 ```
 
-A first small `2x2`, `Ntherm=50`, `Nmeas=100` run is summarized in
-`docs/beta10_sign_check.md`.
+Use `Lx=Ly=4` for the preferred β=10 sign/phase check.  The first 4×4 β=10 run is summarized in `docs/beta10_sign_check.md`.

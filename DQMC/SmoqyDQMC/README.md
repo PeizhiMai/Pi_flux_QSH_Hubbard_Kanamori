@@ -12,14 +12,14 @@ export JULIA_PROJECT="$PWD/vendor/SmoQyDQMC.jl"
 Noninteracting/topology check:
 
 ```bash
-$JULIA_BIN DQMC/SmoqyDQMC/scripts/check_piflux_qsh_h0.jl --Nx=6 --Ly=6 --lambda=0.2 --grid=41
+$JULIA_BIN DQMC/SmoqyDQMC/scripts/check_piflux_qsh_h0.jl --Lx=6 --Ly=6 --lambda=0.2 --grid=41
 ```
 
 Tiny Hubbard-only sign-free smoke:
 
 ```bash
 $JULIA_BIN --project=$JULIA_PROJECT DQMC/SmoqyDQMC/scripts/run_piflux_qsh_smoqy.jl \
-  --Nx=2 --Ly=2 --beta=0.2 --dtau=0.1 --Ntherm=1 --Nmeas=2 --Nupdates=1 --n_stab=1 \
+  --Lx=2 --Ly=2 --beta=0.2 --dtau=0.1 --Ntherm=1 --Nmeas=2 --Nupdates=1 --n_stab=1 \
   --density_kanamori=false
 ```
 
@@ -28,16 +28,16 @@ Kanamori tier smokes:
 ```bash
 # Tier 1 density/Ising Hund
 $JULIA_BIN --project=$JULIA_PROJECT DQMC/SmoqyDQMC/scripts/run_piflux_qsh_smoqy.jl \
-  --Nx=2 --Ly=2 --beta=0.2 --dtau=0.1 --Ntherm=1 --Nmeas=2 --Nupdates=1 --n_stab=1 \
+  --Lx=2 --Ly=2 --beta=0.2 --dtau=0.1 --Ntherm=1 --Nmeas=2 --Nupdates=1 --n_stab=1 \
   --density_kanamori=true
 
 # Tier 2 spin-flip Hund
 $JULIA_BIN --project=$JULIA_PROJECT DQMC/SmoqyDQMC/scripts/run_piflux_qsh_smoqy.jl \
-  --Nx=2 --Ly=2 --beta=0.2 --dtau=0.1 --Ntherm=1 --Nmeas=2 --Nupdates=1 --n_stab=1 \
+  --Lx=2 --Ly=2 --beta=0.2 --dtau=0.1 --Ntherm=1 --Nmeas=2 --Nupdates=1 --n_stab=1 \
   --density_kanamori=true --spin_flip_hund=true
 
 # Tier 3 spin flip plus pair hopping
 $JULIA_BIN --project=$JULIA_PROJECT DQMC/SmoqyDQMC/scripts/run_piflux_qsh_smoqy.jl \
-  --Nx=2 --Ly=2 --beta=0.2 --dtau=0.1 --Ntherm=1 --Nmeas=2 --Nupdates=1 --n_stab=1 \
+  --Lx=2 --Ly=2 --beta=0.2 --dtau=0.1 --Ntherm=1 --Nmeas=2 --Nupdates=1 --n_stab=1 \
   --density_kanamori=true --spin_flip_hund=true --pair_hopping=true
 ```

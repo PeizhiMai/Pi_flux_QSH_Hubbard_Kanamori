@@ -10,7 +10,7 @@ import SmoQyDQMC.LatticeUtilities as lu
 import SmoQyDQMC.JDQMCFramework as dqmcf
 
 const DEFAULTS = Dict{String,Any}(
-    "Nx" => 4,
+    "Lx" => 4,
     "Ly" => 4,
     "t" => 1.0,
     "lambda" => 0.2,
@@ -95,14 +95,14 @@ end
 function remove_x_boundary_wrap_hoppings(tbp, model_geometry)
     unit_cell = model_geometry.unit_cell
     lattice = model_geometry.lattice
-    Nx = lattice.L[1]
+    Lx = lattice.L[1]
     keep = trues(size(tbp.neighbor_table, 2))
     for n in axes(tbp.neighbor_table, 2)
         i = tbp.neighbor_table[1, n]
         j = tbp.neighbor_table[2, n]
         loci, _ = lu.site_to_loc(i, unit_cell, lattice)
         locj, _ = lu.site_to_loc(j, unit_cell, lattice)
-        if loci[1] == Nx - 1 && locj[1] == 0
+        if loci[1] == Lx - 1 && locj[1] == 0
             keep[n] = false
         end
     end
@@ -124,7 +124,7 @@ function remove_x_boundary_wrap_hoppings(tbp, model_geometry)
                                   new_bond_ids, new_bond_slices, tbp.norbital)
 end
 
-function initialize_piflux_qsh(; Nx::Int, Ly::Int, t::Float64, lambda::Float64,
+function initialize_piflux_qsh(; Lx::Int, Ly::Int, t::Float64, lambda::Float64,
                                U::Float64, JH::Float64, mu::Float64, open_x::Bool,
                                density_kanamori::Bool, spin_flip_hund::Bool, pair_hopping::Bool,
                                beta::Float64, dtau::Float64, rng::AbstractRNG)
@@ -132,7 +132,7 @@ function initialize_piflux_qsh(; Nx::Int, Ly::Int, t::Float64, lambda::Float64,
         lattice_vecs = [[1.0, 0.0], [0.0, 1.0]],
         basis_vecs = [[0.0, 0.0], [0.0, 0.0]],
     )
-    lattice = lu.Lattice(L=[Nx, Ly], periodic=[true, true])
+    lattice = lu.Lattice(L=[Lx, Ly], periodic=[true, true])
     model_geometry = ModelGeometry(unit_cell, lattice)
 
     bonds_up, t_up = piflux_qsh_bonds_and_tmeans(t=t, lambda=lambda, spin=:up)
@@ -198,8 +198,8 @@ end
 function density_profile(Gup, Gdn, model_geometry)
     unit_cell = model_geometry.unit_cell
     lattice = model_geometry.lattice
-    Nx, Ly = lattice.L[1], lattice.L[2]
-    prof = zeros(ComplexF64, Nx, 4) # A_up, A_dn, B_up, B_dn
+    Lx, Ly = lattice.L[1], lattice.L[2]
+    prof = zeros(ComplexF64, Lx, 4) # A_up, A_dn, B_up, B_dn
     for site in 1:size(Gup, 1)
         loc, orb = lu.site_to_loc(site, unit_cell, lattice)
         rx = loc[1] + 1
@@ -255,8 +255,8 @@ function main()
     β = p["beta"]; Δτ = p["dtau"]; Lτ = dqmcf.eval_length_imaginary_axis(β, Δτ)
     seed = p["seed"] == 0 ? abs(rand(Int)) : p["seed"]
     rng = Xoshiro(seed)
-    prefix = @sprintf("piflux_qsh_U%.3f_JH%.3f_Nx%d_Ly%d_b%.3f_dt%.3f_lam%.3f_mu%.3f_den%s_sf%s_pair%s",
-                      p["U"], p["JH"], p["Nx"], p["Ly"], β, Δτ, p["lambda"], p["mu"],
+    prefix = @sprintf("piflux_qsh_U%.3f_JH%.3f_Lx%d_Ly%d_b%.3f_dt%.3f_lam%.3f_mu%.3f_den%s_sf%s_pair%s",
+                      p["U"], p["JH"], p["Lx"], p["Ly"], β, Δτ, p["lambda"], p["mu"],
                       string(p["density_kanamori"]), string(p["spin_flip_hund"]), string(p["pair_hopping"]))
     outdir = joinpath(p["outdir"], prefix * @sprintf("-%03d", p["sID"]))
     mkpath(outdir)
@@ -275,7 +275,7 @@ function main()
     @info "Initializing pi-flux QSH SmoQyDQMC" outdir β Δτ Lτ seed
     model_geometry, tbp_up, tbp_dn, hubbard_parameters, kanamori_density_parameters,
     transverse_hst, hst_parameters, fpi_up, fpi_dn = initialize_piflux_qsh(
-        Nx=p["Nx"], Ly=p["Ly"], t=p["t"], lambda=p["lambda"], U=p["U"], JH=p["JH"],
+        Lx=p["Lx"], Ly=p["Ly"], t=p["t"], lambda=p["lambda"], U=p["U"], JH=p["JH"],
         mu=p["mu"], open_x=p["open_x"], density_kanamori=p["density_kanamori"],
         spin_flip_hund=p["spin_flip_hund"], pair_hopping=p["pair_hopping"], beta=β, dtau=Δτ, rng=rng)
 
@@ -299,7 +299,7 @@ function main()
         acc_sum += acceptance_scalar(acc); nsweeps += 1
     end
 
-    prof_num = zeros(ComplexF64, p["Nx"], 4)
+    prof_num = zeros(ComplexF64, p["Lx"], 4)
     phase_sum = 0.0 + 0.0im
     phase_abs_sum = 0.0
     eint_num = 0.0 + 0.0im
@@ -324,7 +324,7 @@ function main()
         eint_num += phase * eint
         phase_sum += phase
         phase_abs_sum += abs(phase)
-        ntot_complex = sum(prof) / p["Nx"]
+        ntot_complex = sum(prof) / p["Lx"]
         phase_ntot = phase * ntot_complex
         phase_eint = phase * eint
         push!(measurement_rows, (meas, real(phase), imag(phase), real(ntot_complex), imag(ntot_complex),
@@ -334,7 +334,7 @@ function main()
     avg_phase = phase_sum / p["Nmeas"]
     prof_avg = prof_num ./ phase_sum
     eint_avg = eint_num / phase_sum
-    density_cell = real(sum(prof_avg) / p["Nx"])
+    density_cell = real(sum(prof_avg) / p["Lx"])
     write_profile(joinpath(outdir, "density_profile.tsv"), prof_avg)
     open(joinpath(outdir, "measurements.tsv"), "w") do io
         println(io, "# meas\tphase_re\tphase_im\tn_per_cell_unreweighted_re\tn_per_cell_unreweighted_im\teint_per_cell_unreweighted_re\teint_per_cell_unreweighted_im\tacceptance_running\tdG\tphase_n_re\tphase_eint_re")

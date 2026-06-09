@@ -4,7 +4,7 @@ using LinearAlgebra
 using Printf
 
 const DEFAULTS = Dict{String,Any}(
-    "Nx" => 6,
+    "Lx" => 6,
     "Ly" => 6,
     "t" => 1.0,
     "lambda" => 0.2,
@@ -48,7 +48,7 @@ function parse_args(defaults, args)
 end
 
 @inline spin_sign(spin::Symbol) = spin === :up ? 1.0 : -1.0
-@inline site_index(x0::Int, y0::Int, orb::Int, Nx::Int, Ly::Int) = 2 * (x0 * Ly + y0) + orb
+@inline site_index(x0::Int, y0::Int, orb::Int, Lx::Int, Ly::Int) = 2 * (x0 * Ly + y0) + orb
 
 function piflux_qsh_bond_defs(t::Float64, λ::Float64, spin::Symbol)
     s = spin_sign(spin)
@@ -64,24 +64,24 @@ function piflux_qsh_bond_defs(t::Float64, λ::Float64, spin::Symbol)
     )
 end
 
-function add_hop!(K, Nx, Ly, open_x, x0, y0, orb1, orb2, dx, dy, h)
+function add_hop!(K, Lx, Ly, open_x, x0, y0, orb1, orb2, dx, dy, h)
     x1 = x0 + dx; y1 = y0 + dy
-    if open_x && (x1 < 0 || x1 >= Nx)
+    if open_x && (x1 < 0 || x1 >= Lx)
         return nothing
     end
-    x1 = mod(x1, Nx); y1 = mod(y1, Ly)
-    i = site_index(x0, y0, orb1, Nx, Ly)
-    j = site_index(x1, y1, orb2, Nx, Ly)
+    x1 = mod(x1, Lx); y1 = mod(y1, Ly)
+    i = site_index(x0, y0, orb1, Lx, Ly)
+    j = site_index(x1, y1, orb2, Lx, Ly)
     K[i,j] = h
     K[j,i] = conj(h)
     return nothing
 end
 
-function build_realspace(Nx, Ly, t, λ, spin; open_x=false)
-    K = zeros(ComplexF64, 2Nx*Ly, 2Nx*Ly)
+function build_realspace(Lx, Ly, t, λ, spin; open_x=false)
+    K = zeros(ComplexF64, 2Lx*Ly, 2Lx*Ly)
     for (orb1, orb2, dx, dy, h) in piflux_qsh_bond_defs(t, λ, spin)
-        for y0 in 0:Ly-1, x0 in 0:Nx-1
-            add_hop!(K, Nx, Ly, open_x, x0, y0, orb1, orb2, dx, dy, h)
+        for y0 in 0:Ly-1, x0 in 0:Lx-1
+            add_hop!(K, Lx, Ly, open_x, x0, y0, orb1, orb2, dx, dy, h)
         end
     end
     return K
@@ -124,29 +124,29 @@ function chern_number(t, λ, spin; N=41)
     return flux / (2π), min_gap
 end
 
-function ph_parity(Nx, Ly)
-    d = zeros(Float64, 2Nx*Ly)
-    for x in 0:Nx-1, y in 0:Ly-1
+function ph_parity(Lx, Ly)
+    d = zeros(Float64, 2Lx*Ly)
+    for x in 0:Lx-1, y in 0:Ly-1
         ηA = iseven(y) ? 1.0 : -1.0
-        d[site_index(x,y,1,Nx,Ly)] = ηA
-        d[site_index(x,y,2,Nx,Ly)] = -ηA
+        d[site_index(x,y,1,Lx,Ly)] = ηA
+        d[site_index(x,y,2,Lx,Ly)] = -ηA
     end
     return Diagonal(d)
 end
 
 function main()
     p = parse_args(DEFAULTS, ARGS)
-    Nx = p["Nx"]; Ly = p["Ly"]; t = p["t"]; λ = p["lambda"]
-    Kup = build_realspace(Nx, Ly, t, λ, :up; open_x=p["open_x"])
-    Kdn = build_realspace(Nx, Ly, t, λ, :dn; open_x=p["open_x"])
+    Lx = p["Lx"]; Ly = p["Ly"]; t = p["t"]; λ = p["lambda"]
+    Kup = build_realspace(Lx, Ly, t, λ, :up; open_x=p["open_x"])
+    Kdn = build_realspace(Lx, Ly, t, λ, :dn; open_x=p["open_x"])
     herm = max(norm(Kup - Kup'), norm(Kdn - Kdn'))
     trerr = norm(Kdn - conj.(Kup))
-    D = ph_parity(Nx, Ly)
+    D = ph_parity(Lx, Ly)
     pherr = norm(D * Kdn * D + Kup)
     Cup, gap_up = chern_number(t, λ, :up; N=p["grid"])
     Cdn, gap_dn = chern_number(t, λ, :dn; N=p["grid"])
     p["print_matrix"] && (println("Kup ="); show(stdout, MIME("text/plain"), Kup); println())
-    @printf("Pi-flux QSH H0 check: Nx=%d Ly=%d t=%.6g lambda=%.6g grid=%d\n", Nx, Ly, t, λ, p["grid"])
+    @printf("Pi-flux QSH H0 check: Lx=%d Ly=%d t=%.6g lambda=%.6g grid=%d\n", Lx, Ly, t, λ, p["grid"])
     @printf("  hermiticity_error = %.6e\n", herm)
     @printf("  time_reversal_error = %.6e\n", trerr)
     @printf("  particle_hole_error = %.6e\n", pherr)
