@@ -3,16 +3,22 @@
 Standalone Julia ED + SmoQyDQMC setup for a minimal two-orbital square-lattice
 π-flux quantum spin Hall parent with onsite Hubbard and Kanamori interaction tiers.
 
-The goal is a controlled comparison to BHZ-Hubbard-Kanamori: the onsite-Hubbard
-π-flux QSH parent is particle-hole symmetric and sign-problem-free at half filling,
-while density/Ising Hund, spin-flip Hund, and pair-hopping tiers can be added to
-measure how the average phase/sign degrades.
+The goal is a controlled comparison to BHZ-Hubbard-Kanamori.  The interactions
+are kept in the same **physical, non-particle-hole-shifted** form as the BHZ
+project: `U n↑ n↓` for the onsite Hubbard term and physical density-density /
+Hund / pair-hopping Kanamori terms.  At physical half filling this means using
+`mu=U/2` for Hubbard-only and `mu=(3U-5JH)/2` for the Kanamori tiers.
+
+The π-flux QSH parent has the antiunitary/bipartite structure needed for a
+Hubbard-only sign-problem-free baseline at the physical half-filling chemical
+potential; density/Ising Hund, spin-flip Hund, and pair-hopping tiers are then
+added to measure average phase/sign degradation.
 
 ## Layout
 
 - `ED/` — finite-temperature grand-canonical exact diagonalization benchmarks.
 - `DQMC/SmoqyDQMC/` — SmoQyDQMC driver and noninteracting/topology checks.
-- `docs/model_conventions.md` — Hamiltonian, topology, PH/sign conventions.
+- `docs/model_conventions.md` — Hamiltonian, topology, interaction and sign conventions.
 - `scripts/health_check.sh` — bounded local ED/topology/DQMC smoke checks.
 - `vendor/SmoQyDQMC.jl/` — vendored SmoQyDQMC with the Kanamori HST extensions.
 
@@ -29,11 +35,13 @@ CE_GCE depot if available.
 
 ## β=10 sign check
 
-The sign-problem check should be run at low temperature.  The default sign-scan
-script now uses `beta=10.0`:
+The sign-problem check should be run at low temperature with physical half-filling
+chemical potentials.  The default sign-scan script uses `beta=10.0`, `Lx=Ly=4`,
+and passes the tier-dependent half-filling `mu` automatically:
 
 ```bash
 OUTDIR=/private/tmp/piflux_beta10_sign_scan JHS="0.25" ./scripts/run_sign_scan.sh
 ```
 
-Use `Lx=Ly=4` for the preferred β=10 sign/phase check.  The first 4×4 β=10 run is summarized in `docs/beta10_sign_check.md`.
+Before doing new production sign scans, run the systematic 2×2 ED `n(mu)` checks
+for both periodic and cylindrical boundary conditions at `beta=7`.

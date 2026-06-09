@@ -6,7 +6,7 @@ using SparseArrays
 using TOML
 
 export EDParams, EDResult, SectorInfo, build_piflux_qsh_onebody,
-       grand_canonical_ed, free_fermion_grand_canonical, write_outputs,
+       grand_canonical_ed, free_fermion_grand_canonical, half_filling_mu, write_outputs,
        parse_cli_args, main
 
 Base.@kwdef struct EDParams
@@ -49,6 +49,15 @@ struct FermionTerm
 end
 
 const _VALID_LEVELS = (:hubbard, :density, :spinflip, :full)
+
+function half_filling_mu(U::Real, JH::Real, interaction_level::Symbol)
+    interaction_level == :hubbard && return U / 2
+    interaction_level in _VALID_LEVELS || error("interaction_level must be one of $(_VALID_LEVELS), got $(interaction_level)")
+    return (3U - 5JH) / 2
+end
+
+half_filling_mu(p::EDParams) = half_filling_mu(p.U, p.JH, p.interaction_level)
+
 
 @inline nsites(p::EDParams) = 2 * p.Lx * p.Ly
 @inline nflavors(p::EDParams) = 2 * nsites(p)
@@ -219,13 +228,12 @@ function diagonal_interaction_energy(state::UInt64, p::EDParams)
         nad = occ(state, dn_flavor(a,Ns)) ? 1.0 : 0.0
         nbu = occ(state, up_flavor(b,Ns)) ? 1.0 : 0.0
         nbd = occ(state, dn_flavor(b,Ns)) ? 1.0 : 0.0
-        e += p.U * (nau - 0.5) * (nad - 0.5)
-        e += p.U * (nbu - 0.5) * (nbd - 0.5)
+        e += p.U * (nau * nad + nbu * nbd)
         if p.interaction_level != :hubbard
             Vsame = p.U - 3p.JH
             Vopp = p.U - 2p.JH
-            e += Vsame * ((nau - 0.5) * (nbu - 0.5) + (nad - 0.5) * (nbd - 0.5))
-            e += Vopp * ((nau - 0.5) * (nbd - 0.5) + (nad - 0.5) * (nbu - 0.5))
+            e += Vsame * (nau * nbu + nad * nbd)
+            e += Vopp * (nau * nbd + nad * nbu)
         end
     end
     return e

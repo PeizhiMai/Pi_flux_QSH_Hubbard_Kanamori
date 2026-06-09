@@ -16,7 +16,7 @@ const DEFAULTS = Dict{String,Any}(
     "lambda" => 0.2,
     "U" => 1.0,
     "JH" => 0.25,
-    "mu" => 0.0,
+    "mu" => 0.5,
     "open_x" => false,
     "density_kanamori" => false,
     "spin_flip_hund" => false,
@@ -67,6 +67,10 @@ function parse_args(defaults::Dict{String,Any}, args)
         i += 1
     end
     return p
+end
+
+function half_filling_mu(U::Real, JH::Real; density_kanamori::Bool)
+    return density_kanamori ? (3U - 5JH) / 2 : U / 2
 end
 
 @inline spin_sign(spin::Symbol) = spin === :up ? 1.0 : -1.0
@@ -148,13 +152,13 @@ function initialize_piflux_qsh(; Lx::Int, Ly::Int, t::Float64, lambda::Float64,
         tbp_dn = remove_x_boundary_wrap_hoppings(tbp_dn, model_geometry)
     end
 
-    hubbard_model = HubbardModel(ph_sym_form=true, U_orbital=[1,2], U_mean=[U,U], U_std=[0.0,0.0])
+    hubbard_model = HubbardModel(ph_sym_form=false, U_orbital=[1,2], U_mean=[U,U], U_std=[0.0,0.0])
     hubbard_parameters = HubbardParameters(hubbard_model=hubbard_model, model_geometry=model_geometry, rng=rng)
     hubbard_hst = HubbardSpinHirschHST(β=beta, Δτ=dtau, hubbard_parameters=hubbard_parameters, rng=rng)
 
     if density_kanamori
         Vsame = (spin_flip_hund && !pair_hopping) ? U - 4JH : U - 3JH
-        kanamori_density_model = KanamoriDensityModel(ph_sym_form=true, orbital_pairs=[(1,2)], U=U, JH=JH,
+        kanamori_density_model = KanamoriDensityModel(ph_sym_form=false, orbital_pairs=[(1,2)], U=U, JH=JH,
                                                        V_same=[Vsame], V_opposite=[U - 2JH])
         kanamori_density_parameters = KanamoriDensityParameters(kanamori_density_model=kanamori_density_model,
                                                                  model_geometry=model_geometry, rng=rng)
@@ -246,7 +250,10 @@ end
 function main()
     p = parse_args(DEFAULTS, ARGS)
     p["U"] == 0.0 && error("This driver is for finite U. Use check_piflux_qsh_h0.jl for U=0.")
-    p["mu"] == 0.0 || @warn "mu != 0 moves away from the half-filled sign-free parent."
+    mu_half = half_filling_mu(p["U"], p["JH"]; density_kanamori=p["density_kanamori"])
+    if abs(p["mu"] - mu_half) > 1e-10
+        @warn "mu differs from the physical half-filling value for this interaction tier" mu=p["mu"] mu_half
+    end
     iseven(p["Ly"]) || @warn "Odd Ly with periodic y can break the particle-hole parity used by the sign-free parent."
     p["spin_flip_hund"] && !p["density_kanamori"] && error("spin_flip_hund=true requires density_kanamori=true")
     p["pair_hopping"] && !p["spin_flip_hund"] && error("pair_hopping=true requires spin_flip_hund=true")
@@ -264,10 +271,12 @@ function main()
     metadata = Dict{String,Any}(string(k)=>v for (k,v) in p)
     metadata["seed_actual"] = seed
     metadata["Ltau"] = Lτ
+    metadata["mu_half_filling"] = mu_half
+    metadata["interaction_convention"] = "physical_non_ph_shifted"
     metadata["interaction_scope"] = (p["spin_flip_hund"] && p["pair_hopping"]) ?
-        "PH-symmetric Hubbard plus full local Kanamori transverse exchange" :
-        (p["spin_flip_hund"] ? "PH-symmetric Hubbard plus density/Ising Hund and spin-flip Hund" :
-         (p["density_kanamori"] ? "PH-symmetric Hubbard plus density/Ising Kanamori" : "PH-symmetric Hubbard only"))
+        "physical Hubbard plus full local Kanamori transverse exchange" :
+        (p["spin_flip_hund"] ? "physical Hubbard plus density/Ising Hund and spin-flip Hund" :
+         (p["density_kanamori"] ? "physical Hubbard plus density/Ising Kanamori" : "physical Hubbard only"))
     open(joinpath(outdir, "metadata.toml"), "w") do io
         TOML.print(io, metadata)
     end

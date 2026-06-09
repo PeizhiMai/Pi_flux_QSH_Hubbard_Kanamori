@@ -1,41 +1,37 @@
 # β=10 sign-problem check
 
-The low-temperature sign-problem check should use `beta=10`.  The preferred
-small-cluster check is now `Lx=Ly=4`; the Hamiltonian remains at half filling
-with `mu=0`.
+The low-temperature sign-problem check should use `beta=10` and the preferred
+small-cluster size `Lx=Ly=4`.
 
-## Preferred Lx=Ly=4 check
-
-Parameters:
+**Current convention:** ED and DQMC now use physical, non-PH-shifted interactions.
+Therefore half filling requires a tier-dependent chemical potential:
 
 ```text
-Lx = 4, Ly = 4
-t = 1.0, lambda = 0.2
-U = 1.0, JH = 0.25
-mu = 0.0
-beta = 10.0, dtau = 0.1
-Ntherm = 50, Nmeas = 100, Nupdates = 1
+Hubbard-only:      mu = U/2
+Kanamori tiers:    mu = (3U - 5JH)/2
 ```
 
-Result from the setup run:
+For `U=1.0, JH=0.25`, use `mu=0.5` for Hubbard-only and `mu=0.875` for the
+Kanamori tiers.  `scripts/run_sign_scan.sh` computes and passes these values
+automatically and records `mu` in the summary TSV.
 
-| tier | average phase | density/cell | comment |
-|---|---:|---:|---|
-| Hubbard only | `1 + 5.71e-16 i` | `2.000000` | Sign-free parent verified at β=10. |
-| Density/Ising Kanamori | `0.991289 - 0.032546 i` | `2.000235` | Mild phase degradation. |
-| Spin-flip Hund | `0.231718 - 0.021749 i` | `1.987817` | Severe phase degradation. |
-| Full transverse Kanamori | `-0.060602 + 0.099462 i` | `2.000872` | Very severe phase/sign problem. |
+## Recommended workflow before new β=10 sign scans
 
-Raw local output was written under `/private/tmp/piflux_beta10_L4_sign_scan`
-during the setup run.  Reproduce with:
+Before doing further sign-problem checks, run the systematic 2×2 ED `n(mu)`
+benchmark at `beta=7` for both periodic and cylindrical boundary conditions and
+all four tiers (`hubbard`, `density`, `spinflip`, `full`).  This verifies the
+physical-interaction half-filling convention before spending time on larger DQMC
+sign scans.
+
+## Reproduction command for the physical-convention scan
 
 ```bash
-OUTDIR=/private/tmp/piflux_beta10_L4_sign_scan BETAS="10.0" JHS="0.25" Lx=4 Ly=4 \
-  NTHERM=50 NMEAS=100 ./scripts/run_sign_scan.sh
+OUTDIR=/private/tmp/piflux_beta10_L4_sign_scan BETAS="10.0" JHS="0.25" Lx=4 Ly=4   NTHERM=50 NMEAS=100 ./scripts/run_sign_scan.sh
 ```
 
-## Earlier 2x2 smoke check
+## Archived old setup-run numbers
 
-An earlier `Lx=Ly=2` β=10 smoke showed the same hierarchy: Hubbard-only was
-phase `1` to numerical precision, density/Ising was benign, spin-flip degraded
-the phase, and full transverse Kanamori was already severe.
+The earlier setup-run numbers were generated before this convention correction,
+with the PH-shifted interaction convention and `mu=0`.  They should **not** be
+used as physical-interaction results.  They only established that the DQMC driver
+ran and that the qualitative phase hierarchy was visible in the old convention.

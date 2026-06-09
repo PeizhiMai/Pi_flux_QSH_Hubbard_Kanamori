@@ -31,12 +31,14 @@ SMOKE_OUTDIR="${SMOKE_OUTDIR:-/private/tmp/piflux_qsh_hubbard_kanamori_smoke}"
 rm -rf "$SMOKE_OUTDIR"
 mkdir -p "$SMOKE_OUTDIR"
 common=(--Lx=2 --Ly=2 --t=1.0 --lambda=0.2 --U=1.0 --JH=0.25 --beta=0.2 --dtau=0.1 --Ntherm=1 --Nmeas=2 --Nupdates=1 --n_stab=1 --outdir="$SMOKE_OUTDIR")
+MU_HUBBARD=0.5
+MU_KANAMORI=0.875
 
-echo "[health] DQMC Hubbard-only sign-free smoke"
-"$JULIA_BIN" --project="$JULIA_PROJECT" DQMC/SmoqyDQMC/scripts/run_piflux_qsh_smoqy.jl "${common[@]}" --density_kanamori=false --sID=1
+echo "[health] DQMC Hubbard-only physical half-filling smoke (mu=$MU_HUBBARD)"
+"$JULIA_BIN" --project="$JULIA_PROJECT" DQMC/SmoqyDQMC/scripts/run_piflux_qsh_smoqy.jl "${common[@]}" --mu="$MU_HUBBARD" --density_kanamori=false --sID=1
 hub_summary="$(find "$SMOKE_OUTDIR" -name summary.txt | sort | head -1)"
 python3 - <<PY
-import re, sys, pathlib
+import re, pathlib
 text = pathlib.Path('$hub_summary').read_text()
 m = re.search(r'average_phase =\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*([+-](?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)i', text)
 if not m:
@@ -47,13 +49,13 @@ if abs(reph - 1.0) > 1e-8 or abs(imph) > 1e-8:
     raise SystemExit('Hubbard-only average phase is not approximately 1')
 PY
 
-echo "[health] DQMC Tier 1 density Kanamori smoke"
-"$JULIA_BIN" --project="$JULIA_PROJECT" DQMC/SmoqyDQMC/scripts/run_piflux_qsh_smoqy.jl "${common[@]}" --density_kanamori=true --sID=2
+echo "[health] DQMC Tier 1 density Kanamori smoke (mu=$MU_KANAMORI)"
+"$JULIA_BIN" --project="$JULIA_PROJECT" DQMC/SmoqyDQMC/scripts/run_piflux_qsh_smoqy.jl "${common[@]}" --mu="$MU_KANAMORI" --density_kanamori=true --sID=2
 
-echo "[health] DQMC Tier 2 spin-flip Hund smoke"
-"$JULIA_BIN" --project="$JULIA_PROJECT" DQMC/SmoqyDQMC/scripts/run_piflux_qsh_smoqy.jl "${common[@]}" --density_kanamori=true --spin_flip_hund=true --sID=3
+echo "[health] DQMC Tier 2 spin-flip Hund smoke (mu=$MU_KANAMORI)"
+"$JULIA_BIN" --project="$JULIA_PROJECT" DQMC/SmoqyDQMC/scripts/run_piflux_qsh_smoqy.jl "${common[@]}" --mu="$MU_KANAMORI" --density_kanamori=true --spin_flip_hund=true --sID=3
 
-echo "[health] DQMC Tier 3 full transverse Kanamori smoke"
-"$JULIA_BIN" --project="$JULIA_PROJECT" DQMC/SmoqyDQMC/scripts/run_piflux_qsh_smoqy.jl "${common[@]}" --density_kanamori=true --spin_flip_hund=true --pair_hopping=true --sID=4
+echo "[health] DQMC Tier 3 full transverse Kanamori smoke (mu=$MU_KANAMORI)"
+"$JULIA_BIN" --project="$JULIA_PROJECT" DQMC/SmoqyDQMC/scripts/run_piflux_qsh_smoqy.jl "${common[@]}" --mu="$MU_KANAMORI" --density_kanamori=true --spin_flip_hund=true --pair_hopping=true --sID=4
 
 echo "[health] OK; smoke output: $SMOKE_OUTDIR"

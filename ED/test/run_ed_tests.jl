@@ -24,10 +24,12 @@ using .PiFluxQSHKanamoriED
         @test ed.N ≈ free.N atol=1e-11 rtol=1e-11
     end
 
-    @testset "particle-hole half filling" begin
+    @testset "physical-interaction half filling" begin
         for lvl in (:hubbard, :density, :spinflip, :full)
-            p = EDParams(Lx=1, Ly=1, t=0.0, lambda=0.0, U=2.0, JH=0.3,
-                         beta=1.2, mu=0.0, interaction_level=lvl)
+            base = EDParams(Lx=1, Ly=1, t=0.0, lambda=0.0, U=2.0, JH=0.3,
+                            beta=1.2, mu=0.0, interaction_level=lvl)
+            p = EDParams(; (name=>getfield(base,name) for name in fieldnames(EDParams) if name != :mu)...,
+                         mu=half_filling_mu(base))
             r = grand_canonical_ed(p)
             @test r.N ≈ 2.0 atol=1e-11
             @test r.Nup ≈ 1.0 atol=1e-11
