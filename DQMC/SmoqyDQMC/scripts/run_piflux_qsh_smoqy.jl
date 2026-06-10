@@ -4,6 +4,7 @@ using LinearAlgebra
 using Random
 using Printf
 using TOML
+using Serialization
 
 using SmoQyDQMC
 import SmoQyDQMC.LatticeUtilities as lu
@@ -33,6 +34,12 @@ const DEFAULTS = Dict{String,Any}(
     "seed" => 0,
     "sID" => 1,
     "outdir" => joinpath(@__DIR__, "..", "results", "piflux_qsh_smoqy"),
+    "checkpoint_enable" => false,
+    "checkpoint_file" => "",
+    "checkpoint_freq_hours" => 0.5,
+    "runtime_limit_hours" => 0.0,
+    "checkpoint_keep" => true,
+    "checkpoint_resume" => true,
 )
 
 function parse_value(x::AbstractString, default)
@@ -237,6 +244,27 @@ function interaction_energy_per_cell(hubbard_parameters, kanamori_density_parame
     return e
 end
 
+function write_checkpoint_file(filename::AbstractString, state::Dict{String,Any})
+    mkpath(dirname(filename))
+    tmp = filename * ".tmp"
+    open(tmp, "w") do io
+        serialize(io, state)
+    end
+    mv(tmp, filename; force=true)
+    open(filename * ".status", "w") do io
+        @printf(io, "written_at_epoch = %.6f\n", time())
+        @printf(io, "thermal_done = %d\n", get(state, "thermal_done", -1))
+        @printf(io, "meas_done = %d\n", get(state, "meas_done", -1))
+    end
+    return time()
+end
+
+function read_checkpoint_file(filename::AbstractString)
+    open(filename, "r") do io
+        return deserialize(io)
+    end
+end
+
 function reconstruct_greens(Bup, Bdn, β::Float64, Δτ::Float64, n_stab::Int)
     fgc_up = dqmcf.FermionGreensCalculator(Bup, β, Δτ, n_stab)
     fgc_dn = dqmcf.FermionGreensCalculator(Bdn, β, Δτ, n_stab)
@@ -259,19 +287,23 @@ function main()
     p["pair_hopping"] && !p["spin_flip_hund"] && error("pair_hopping=true requires spin_flip_hund=true")
     p["spin_flip_hund"] && (p["symmetric"] || p["checkerboard"]) && error("transverse Hund currently requires asymmetric exact propagators")
 
-    β = p["beta"]; Δτ = p["dtau"]; Lτ = dqmcf.eval_length_imaginary_axis(β, Δτ)
+    β = p["beta"]
+    Δτ = p["dtau"]
+    Lτ = dqmcf.eval_length_imaginary_axis(β, Δτ)
     seed = p["seed"] == 0 ? abs(rand(Int)) : p["seed"]
     rng = Xoshiro(seed)
-    prefix = @sprintf("piflux_qsh_U%.3f_JH%.3f_Lx%d_Ly%d_b%.3f_dt%.3f_lam%.3f_mu%.3f_den%s_sf%s_pair%s",
+    prefix = @sprintf("piflux_qsh_U%.3f_JH%.3f_Lx%d_Ly%d_b%.3f_dt%.3f_lam%.3f_mu%.3f_openx%s_den%s_sf%s_pair%s",
                       p["U"], p["JH"], p["Lx"], p["Ly"], β, Δτ, p["lambda"], p["mu"],
-                      string(p["density_kanamori"]), string(p["spin_flip_hund"]), string(p["pair_hopping"]))
+                      string(p["open_x"]), string(p["density_kanamori"]), string(p["spin_flip_hund"]), string(p["pair_hopping"]))
     outdir = joinpath(p["outdir"], prefix * @sprintf("-%03d", p["sID"]))
     mkpath(outdir)
+    checkpoint_file = isempty(p["checkpoint_file"]) ? joinpath(outdir, "checkpoint.jls") : p["checkpoint_file"]
 
     metadata = Dict{String,Any}(string(k)=>v for (k,v) in p)
     metadata["seed_actual"] = seed
     metadata["Ltau"] = Lτ
     metadata["mu_half_filling"] = mu_half
+    metadata["checkpoint_file_resolved"] = checkpoint_file
     metadata["interaction_convention"] = "physical_non_ph_shifted"
     metadata["interaction_scope"] = (p["spin_flip_hund"] && p["pair_hopping"]) ?
         "physical Hubbard plus full local Kanamori transverse exchange" :
@@ -281,24 +313,120 @@ function main()
         TOML.print(io, metadata)
     end
 
-    @info "Initializing pi-flux QSH SmoQyDQMC" outdir β Δτ Lτ seed
-    model_geometry, tbp_up, tbp_dn, hubbard_parameters, kanamori_density_parameters,
-    transverse_hst, hst_parameters, fpi_up, fpi_dn = initialize_piflux_qsh(
-        Lx=p["Lx"], Ly=p["Ly"], t=p["t"], lambda=p["lambda"], U=p["U"], JH=p["JH"],
-        mu=p["mu"], open_x=p["open_x"], density_kanamori=p["density_kanamori"],
-        spin_flip_hund=p["spin_flip_hund"], pair_hopping=p["pair_hopping"], beta=β, dtau=Δτ, rng=rng)
+    @info "Initializing pi-flux QSH SmoQyDQMC" outdir β Δτ Lτ seed checkpoint_file
 
-    Bup = initialize_propagators(fpi_up, symmetric=p["symmetric"], checkerboard=p["checkerboard"])
-    Bdn = initialize_propagators(fpi_dn, symmetric=p["symmetric"], checkerboard=p["checkerboard"])
-    if p["spin_flip_hund"] && p["pair_hopping"]
-        apply_kanamori_transverse_to_propagators!(Bup, Bdn, transverse_hst)
-    elseif p["spin_flip_hund"]
-        apply_hund_spinflip_to_propagators!(Bup, Bdn, transverse_hst)
+    start_timestamp = time()
+    last_checkpoint_timestamp = start_timestamp
+
+    thermal_done = 0
+    meas_done = 0
+    δG = 0.0
+    δθ = 0.0
+    acc_sum = 0.0
+    nsweeps = 0
+    prof_num = zeros(ComplexF64, p["Lx"], 4)
+    phase_sum = 0.0 + 0.0im
+    phase_abs_sum = 0.0
+    eint_num = 0.0 + 0.0im
+    measurement_rows = Tuple{Int,Float64,Float64,Float64,Float64,Float64,Float64,Float64,Float64,Float64,Float64}[]
+
+    if p["checkpoint_enable"] && p["checkpoint_resume"] && isfile(checkpoint_file)
+        @info "Resuming pi-flux QSH SmoQyDQMC from checkpoint" checkpoint_file
+        checkpoint = read_checkpoint_file(checkpoint_file)
+        checkpoint_parameters = get(checkpoint, "parameters", Dict{String,Any}())
+        for key in ("Lx", "Ly", "t", "lambda", "U", "JH", "mu", "open_x", "density_kanamori", "spin_flip_hund", "pair_hopping", "beta", "dtau")
+            if haskey(checkpoint_parameters, key) && checkpoint_parameters[key] != p[key]
+                error("Checkpoint parameter mismatch for $key: checkpoint=$(checkpoint_parameters[key]) requested=$(p[key])")
+            end
+        end
+
+        rng = checkpoint["rng"]
+        model_geometry = checkpoint["model_geometry"]
+        tbp_up = checkpoint["tbp_up"]
+        tbp_dn = checkpoint["tbp_dn"]
+        hubbard_parameters = get(checkpoint, "hubbard_parameters", nothing)
+        kanamori_density_parameters = get(checkpoint, "kanamori_density_parameters", nothing)
+        hst_parameters = checkpoint["hst_parameters"]
+        fpi_up = checkpoint["fpi_up"]
+        fpi_dn = checkpoint["fpi_dn"]
+        Bup = checkpoint["Bup"]
+        Bdn = checkpoint["Bdn"]
+        thermal_done = checkpoint["thermal_done"]
+        meas_done = checkpoint["meas_done"]
+        δG = checkpoint["δG"]
+        δθ = checkpoint["δθ"]
+        acc_sum = checkpoint["acc_sum"]
+        nsweeps = checkpoint["nsweeps"]
+        prof_num = checkpoint["prof_num"]
+        phase_sum = checkpoint["phase_sum"]
+        phase_abs_sum = checkpoint["phase_abs_sum"]
+        eint_num = get(checkpoint, "eint_num", 0.0 + 0.0im)
+        measurement_rows = checkpoint["measurement_rows"]
+        last_checkpoint_timestamp = time()
+        fgc_up, fgc_dn, Gup, Gdn, logdetGup, sgndetGup, logdetGdn, sgndetGdn = reconstruct_greens(Bup, Bdn, β, Δτ, p["n_stab"])
+    else
+        model_geometry, tbp_up, tbp_dn, hubbard_parameters, kanamori_density_parameters,
+        transverse_hst, hst_parameters, fpi_up, fpi_dn = initialize_piflux_qsh(
+            Lx=p["Lx"], Ly=p["Ly"], t=p["t"], lambda=p["lambda"], U=p["U"], JH=p["JH"],
+            mu=p["mu"], open_x=p["open_x"], density_kanamori=p["density_kanamori"],
+            spin_flip_hund=p["spin_flip_hund"], pair_hopping=p["pair_hopping"], beta=β, dtau=Δτ, rng=rng)
+
+        Bup = initialize_propagators(fpi_up, symmetric=p["symmetric"], checkerboard=p["checkerboard"])
+        Bdn = initialize_propagators(fpi_dn, symmetric=p["symmetric"], checkerboard=p["checkerboard"])
+        if p["spin_flip_hund"] && p["pair_hopping"]
+            apply_kanamori_transverse_to_propagators!(Bup, Bdn, transverse_hst)
+        elseif p["spin_flip_hund"]
+            apply_hund_spinflip_to_propagators!(Bup, Bdn, transverse_hst)
+        end
+        fgc_up, fgc_dn, Gup, Gdn, logdetGup, sgndetGup, logdetGdn, sgndetGdn = reconstruct_greens(Bup, Bdn, β, Δτ, p["n_stab"])
     end
-    fgc_up, fgc_dn, Gup, Gdn, logdetGup, sgndetGup, logdetGdn, sgndetGdn = reconstruct_greens(Bup, Bdn, β, Δτ, p["n_stab"])
 
-    δG = 0.0; δθ = 0.0; acc_sum = 0.0; nsweeps = 0
-    for _ in 1:p["Ntherm"]
+    function checkpoint_state(current_thermal_done::Int, current_meas_done::Int)
+        return Dict{String,Any}(
+            "driver" => "run_piflux_qsh_smoqy.jl",
+            "format_version" => 1,
+            "parameters" => Dict{String,Any}(string(k) => v for (k, v) in p),
+            "rng" => rng,
+            "model_geometry" => model_geometry,
+            "tbp_up" => tbp_up,
+            "tbp_dn" => tbp_dn,
+            "hubbard_parameters" => hubbard_parameters,
+            "kanamori_density_parameters" => kanamori_density_parameters,
+            "hst_parameters" => hst_parameters,
+            "fpi_up" => fpi_up,
+            "fpi_dn" => fpi_dn,
+            "Bup" => Bup,
+            "Bdn" => Bdn,
+            "thermal_done" => current_thermal_done,
+            "meas_done" => current_meas_done,
+            "δG" => δG,
+            "δθ" => δθ,
+            "acc_sum" => acc_sum,
+            "nsweeps" => nsweeps,
+            "prof_num" => prof_num,
+            "phase_sum" => phase_sum,
+            "phase_abs_sum" => phase_abs_sum,
+            "eint_num" => eint_num,
+            "measurement_rows" => measurement_rows,
+            "written_at_epoch" => time(),
+        )
+    end
+
+    function maybe_checkpoint!(current_thermal_done::Int, current_meas_done::Int; force::Bool=false)
+        p["checkpoint_enable"] || return false
+        now = time()
+        checkpoint_due = p["checkpoint_freq_hours"] > 0.0 && (now - last_checkpoint_timestamp) >= p["checkpoint_freq_hours"] * 3600.0
+        runtime_due = p["runtime_limit_hours"] > 0.0 && (now - start_timestamp) >= p["runtime_limit_hours"] * 3600.0
+        if force || checkpoint_due || runtime_due
+            last_checkpoint_timestamp = write_checkpoint_file(checkpoint_file, checkpoint_state(current_thermal_done, current_meas_done))
+            @info "Wrote pi-flux QSH SmoQyDQMC checkpoint" checkpoint_file current_thermal_done current_meas_done runtime_due
+        end
+        return runtime_due
+    end
+
+    maybe_checkpoint!(thermal_done, meas_done; force=(p["checkpoint_enable"] && thermal_done == 0 && meas_done == 0 && !isfile(checkpoint_file)))
+
+    for sweep in (thermal_done + 1):p["Ntherm"]
         acc, logdetGup, sgndetGup, logdetGdn, sgndetGdn, δG, δθ = local_updates!(
             Gup, logdetGup, sgndetGup, Gdn, logdetGdn, sgndetGdn, hst_parameters;
             fermion_path_integral_up=fpi_up, fermion_path_integral_dn=fpi_dn,
@@ -306,14 +434,11 @@ function main()
             Bup=Bup, Bdn=Bdn, δG_max=p["dGmax"], δG=δG, δθ=δθ, rng=rng,
             update_stabilization_frequency=false)
         acc_sum += acceptance_scalar(acc); nsweeps += 1
+        thermal_done = sweep
+        maybe_checkpoint!(thermal_done, meas_done) && exit(13)
     end
 
-    prof_num = zeros(ComplexF64, p["Lx"], 4)
-    phase_sum = 0.0 + 0.0im
-    phase_abs_sum = 0.0
-    eint_num = 0.0 + 0.0im
-    measurement_rows = Tuple{Int,Float64,Float64,Float64,Float64,Float64,Float64,Float64,Float64,Float64,Float64}[]
-    for meas in 1:p["Nmeas"]
+    for meas in (meas_done + 1):p["Nmeas"]
         for _ in 1:p["Nupdates"]
             acc, logdetGup, sgndetGup, logdetGdn, sgndetGdn, δG, δθ = local_updates!(
                 Gup, logdetGup, sgndetGup, Gdn, logdetGdn, sgndetGdn, hst_parameters;
@@ -338,6 +463,8 @@ function main()
         phase_eint = phase * eint
         push!(measurement_rows, (meas, real(phase), imag(phase), real(ntot_complex), imag(ntot_complex),
                                  real(eint), imag(eint), acc_sum/nsweeps, δG, real(phase_ntot), real(phase_eint)))
+        meas_done = meas
+        maybe_checkpoint!(thermal_done, meas_done) && exit(13)
     end
 
     avg_phase = phase_sum / p["Nmeas"]
@@ -353,20 +480,45 @@ function main()
     end
     open(joinpath(outdir, "summary.txt"), "w") do io
         @printf(io, "average_phase = %.12g%+.12gi\n", real(avg_phase), imag(avg_phase))
-        @printf(io, "average_abs_phase = %.12g\n", phase_abs_sum / p["Nmeas"])
+        @printf(io, "average_phase_abs = %.12g\n", abs(avg_phase))
+        @printf(io, "average_abs_phase_per_measurement = %.12g\n", phase_abs_sum / p["Nmeas"])
         @printf(io, "acceptance_rate = %.12g\n", acc_sum / nsweeps)
         @printf(io, "dG = %.12g\n", δG)
         @printf(io, "dtheta = %.12g\n", δθ)
         @printf(io, "density_per_cell_reweighted = %.12g\n", density_cell)
         @printf(io, "interaction_energy_per_cell_reweighted = %.12g%+.12gi\n", real(eint_avg), imag(eint_avg))
         @printf(io, "interaction_scope = %s\n", metadata["interaction_scope"])
+        if p["density_kanamori"]
+            @printf(io, "V_opposite = U - 2JH = %.12g\n", p["U"] - 2*p["JH"])
+            if p["spin_flip_hund"] && p["pair_hopping"]
+                @printf(io, "V_same = U - 3JH = %.12g\n", p["U"] - 3*p["JH"])
+                @printf(io, "pair_hopping = true; Jpair = JH = %.12g\n", p["JH"])
+            elseif p["spin_flip_hund"]
+                @printf(io, "V_same_adjusted = U - 4JH = %.12g\n", p["U"] - 4*p["JH"])
+                @printf(io, "spin_flip_hund = true; onsite compensation = JH/2 = %.12g\n", p["JH"]/2)
+            else
+                @printf(io, "V_same = U - 3JH = %.12g\n", p["U"] - 3*p["JH"])
+            end
+        end
         @printf(io, "output_dir = %s\n", outdir)
     end
+
+    if p["checkpoint_enable"]
+        if p["checkpoint_keep"]
+            write_checkpoint_file(checkpoint_file, checkpoint_state(thermal_done, meas_done))
+        else
+            isfile(checkpoint_file) && rm(checkpoint_file; force=true)
+            isfile(checkpoint_file * ".status") && rm(checkpoint_file * ".status"; force=true)
+        end
+    end
+
     open(joinpath(outdir, "complete.status"), "w") do io
-        @printf(io, "measurements = %d\n", p["Nmeas"])
+        @printf(io, "completed_at_epoch = %.6f\n", time())
+        @printf(io, "measurements = %d\n", meas_done)
     end
     @printf("DQMC complete: %s\n", outdir)
     @printf("  average phase = %.8g%+.8gi\n", real(avg_phase), imag(avg_phase))
+    @printf("  |average phase| = %.8g\n", abs(avg_phase))
     @printf("  density/cell  = %.8g\n", density_cell)
     @printf("  interaction E = %.8g%+.8gi\n", real(eint_avg), imag(eint_avg))
 end
