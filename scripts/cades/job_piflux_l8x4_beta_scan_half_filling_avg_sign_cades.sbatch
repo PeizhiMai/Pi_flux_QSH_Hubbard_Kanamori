@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -A ccsd
+#SBATCH -A cnms
 #SBATCH -p burst
 #SBATCH -N 1
 #SBATCH -n 32
@@ -189,7 +189,7 @@ if [[ "${AUTO_RESUBMIT}" == "true" && "${checkpoint_stop}" == "true" ]]; then
   if (( RESUBMIT_COUNT < MAX_RESUBMITS )); then
     next_count=$((RESUBMIT_COUNT + 1))
     script_path=$(readlink -f "${BASH_SOURCE[0]}")
-    resubmit_account=${SLURM_JOB_ACCOUNT:-ccsd}
+    resubmit_account=${SLURM_JOB_ACCOUNT:-cnms}
     resubmit_job_name=${SLURM_JOB_NAME:-pfQSH_resume}
     echo "[$(date -Is)] incomplete with valid checkpoints; resubmitting task ${TASK_ID} as account=${resubmit_account} script=${script_path} attempt ${next_count}/${MAX_RESUBMITS}"
     RESUBMIT_COUNT="${next_count}" sbatch -A "${resubmit_account}" --array="${TASK_ID}" --job-name="${resubmit_job_name}" "${script_path}"
