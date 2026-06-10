@@ -6,7 +6,7 @@
 #SBATCH --ntasks-per-node=32
 #SBATCH -c 1
 #SBATCH --mem=100G
-#SBATCH -t 01:20:00
+#SBATCH -t 02:30:00
 #SBATCH --chdir=/home/9pm/Pi_flux_QSH_Hubbard_Kanamori
 #SBATCH --job-name=pfQSH_sign
 #SBATCH --output=/home/9pm/Pi_flux_QSH_Hubbard_Kanamori/logs/%x_%A_%a_%j.out
@@ -105,8 +105,8 @@ PY
 esac
 
 RANKS=${SLURM_NTASKS:-32}
-CHECKPOINT_FREQ_HOURS=${CHECKPOINT_FREQ_HOURS:-1.0}
-RUNTIME_LIMIT_HOURS=${RUNTIME_LIMIT_HOURS:-1.0}
+CHECKPOINT_FREQ_HOURS=${CHECKPOINT_FREQ_HOURS:-2.0}
+RUNTIME_LIMIT_HOURS=${RUNTIME_LIMIT_HOURS:-2.0}
 MAX_RESUBMITS=${MAX_RESUBMITS:-12}
 RESUBMIT_COUNT=${RESUBMIT_COUNT:-0}
 AUTO_RESUBMIT=${AUTO_RESUBMIT:-true}
@@ -156,7 +156,7 @@ echo "host=$(hostname) ranks=${RANKS} resubmit=${RESUBMIT_COUNT}/${MAX_RESUBMITS
 echo "params: L=${LX}x${LY} BC=${BC} open_x=${OPEN_X} tier=${TIER} density=${DENSITY_KANAMORI} spin_flip=${SPIN_FLIP_HUND} pair=${PAIR_HOPPING}"
 echo "one-body: t=${T} lambda=${LAMBDA}; interactions: U=${U} JH=${JH}; mu=${MU}; beta=${BETA} dtau=${DTAU}"
 echo "statistics per rank: Ntherm=${NTHERM} Nmeas=${NMEAS} Nupdates=${NUPDATES}; total chains=${RANKS}"
-echo "checkpoint: freq_hours=${CHECKPOINT_FREQ_HOURS} runtime_limit_hours=${RUNTIME_LIMIT_HOURS} walltime=01:20:00 keep=true"
+echo "checkpoint: freq_hours=${CHECKPOINT_FREQ_HOURS} runtime_limit_hours=${RUNTIME_LIMIT_HOURS} walltime=02:30:00 keep=true"
 echo "JULIA=$(command -v julia || true)"
 echo "MPIEXECJL=$(command -v mpiexecjl || true)"
 
