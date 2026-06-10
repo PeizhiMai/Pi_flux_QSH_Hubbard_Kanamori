@@ -5,8 +5,6 @@ The main sign-problem diagnostic is |<phase>|, computed from the complex
 average phases of all completed ranks.  The per-rank |<phase>| mean is also
 reported as a useful, but upward-biased, stability diagnostic.
 """
-from __future__ import annotations
-
 import argparse
 import math
 import statistics as stats
@@ -44,7 +42,7 @@ def parse_complex(s: str) -> complex:
     return complex(s.strip().replace("i", "j"))
 
 
-def parse_summary(path: Path) -> dict[str, str]:
+def parse_summary(path: Path) -> dict:
     out = {}
     for line in path.read_text().splitlines():
         if "=" not in line:
@@ -87,11 +85,11 @@ def summarize_run(run_dir: Path):
         return None
 
     metadata = None
-    phases: list[complex] = []
-    rank_abs: list[float] = []
-    densities: list[float] = []
-    eints: list[complex] = []
-    accs: list[float] = []
+    phases = []
+    rank_abs = []
+    densities = []
+    eints = []
+    accs = []
     nmeas_total = 0
     complete_count = 0
 

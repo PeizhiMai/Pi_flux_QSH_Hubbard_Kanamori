@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """Make a one-page avg-phase/sign summary PDF for pi-flux QSH Kanamori scans."""
-from __future__ import annotations
-
 import argparse
 import csv
 from datetime import datetime
