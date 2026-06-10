@@ -9,3 +9,5 @@ results/
 *.jld2
 *.checkpoint
 *.ser
+__pycache__/
+*.py[cod]
